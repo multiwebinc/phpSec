@@ -25,25 +25,32 @@ class Pdo extends Store {
    */
   private $psl = null;
 
-  public function __construct($loc, \phpSec\Core $psl) {
+  public function __construct($loc, \phpSec\Core $psl, \PDO $dbh = null, $table = null) {
     $this->psl = $psl;
 
-    /* Separate username and password from DSN */
-    $parts = self::parseDsn($loc);
-    $loc   = 'mysql:dbname='.$parts['dbname'].';host='.$parts['host'];
+    /* PDO object was already provided. No need to reconnect */
+    if (isset($dbh)) {
+      $this->dbh = $dbh;
+      $this->table = $table;
+    }
+    else {
+      /* Separate username and password from DSN */
+      $parts = self::parseDsn($loc);
+      $loc   = 'mysql:dbname='.$parts['dbname'].';host='.$parts['host'];
 
-    /* We try to connect to the database. If this fails throw an error. */
-    try {
+      /* We try to connect to the database. If this fails throw an error. */
+      try {
       $this->dbh = new \PDO($loc, $parts['username'], $parts['password']);
-    } catch(\PDOException $e) {
+      } catch(\PDOException $e) {
       throw new \phpSec\Exception\IOException('Database connection failed: ' . $e->getMessage());
       return false;
-    }
+      }
 
-    /* Cool, we connected to the databse with no problems.
-     * Now let's try to find the table we want. */
-    $this->table = $parts['table'];
-    /* Got it!! No just kidding. */
+      /* Cool, we connected to the databse with no problems.
+      * Now let's try to find the table we want. */
+      $this->table = $parts['table'];
+      /* Got it!! No just kidding. */
+    }
 
     /* This is the expected structure of the table. Neat eh? */
     $storeTable = array(
