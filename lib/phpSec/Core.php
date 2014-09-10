@@ -56,6 +56,10 @@ class Core extends \Pimple {
     $this['auth/google'] = function($psl) {
       return new Auth\Google($psl);
     };
+    
+    $this['auth/gridcard'] = function($psl) {
+      return new Auth\Gridcard($psl);
+    };
 
     $this['auth/otp'] = function($psl) {
       return new Auth\Otp($psl);
