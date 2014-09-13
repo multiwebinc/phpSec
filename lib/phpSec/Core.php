@@ -45,8 +45,8 @@ class Core extends \Pimple {
     /**
      * Core phpSec objects.
      */
-    $this['auth/authy'] = function() {
-      return new Auth\Authy();
+    $this['auth/authy'] = function($psl) {
+      return new Auth\Authy($psl);
     };
 
     $this['auth/mnemonic'] = function($psl) {
