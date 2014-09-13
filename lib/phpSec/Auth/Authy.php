@@ -3,7 +3,7 @@
   phpSec - A PHP security library
 
   @author    Audun Larsen <larsen@xqus.com>
-  @copyright Copyright (c) Audun Larsen, 2012
+  @copyright Copyright (c) Audun Larsen, 2012, 2013, 2014
   @link      https://github.com/phpsec/phpSec
   @license   http://opensource.org/licenses/mit-license.php The MIT License
  */
@@ -36,6 +36,16 @@ class Authy {
   public $lastError = null;
 
   /**
+   * Authy ID
+   */
+  public $authyId;
+
+  /**
+   * \phpSec\Core object
+   */
+  private $psl;
+
+  /**
    * Server URLs.
    */
   private $_servers = array(
@@ -65,6 +75,9 @@ class Authy {
    * @param string $countrycode
    *   User countrycode. Defaults to 1 (USA).
    *
+   * @param string $uid
+   *   User ID
+   *
    * @return mixed
    *   Returns the users Authy ID on success or false on errors.
    *   @see \phpSec\Auth\Authy::$lastError.
@@ -80,8 +93,8 @@ class Authy {
     $result = $this->apiCall('new', $data);
 
     if($result === false) {
-    	$this->lastError = 'AUTHY_SERVER_ERROR';
-    	return false;
+      $this->lastError = 'AUTHY_SERVER_ERROR';
+      return false;
     }
 
     if(isset($result->errors)) {
@@ -93,15 +106,15 @@ class Authy {
       return false;
     }
 
-    if(isset($result->user->id)) {
-        $this->authyId = $result->user->id;
+    if (isset($result->user->id)) {
+      $this->authyId = $result->user->id;
 
-        $store['authyId'] = $this->authyId;
-        $storeId = $this->getStoreId($uid);
+      $store['authyId'] = $this->authyId;
+      $storeId = $this->getStoreId($uid);
 
-        $this->psl['store']->write('authy', $storeId, $store);
+      $this->psl['store']->write('authy', $storeId, $store);
 
-    	return $this->authyId;
+      return $this->authyId;
     }
     $this->lastError = 'AUTHY_SERVER_SAYS_NO';
     return false;
@@ -134,26 +147,59 @@ class Authy {
     $result = $this->apiCall('verify', $data);
 
     if($result === false) {
-    	$this->lastError = 'AUTHY_SERVER_ERROR';
-    	return false;
+      $this->lastError = 'AUTHY_SERVER_ERROR';
+      return false;
     }
 
     if(isset($result->errors)) {
-    	if(isset($result->errors->token))   {
-    		$this->lastError = 'AUTHY_SERVER_BAD_OTP';
-    	} elseif(isset($result->errors->api_key)) {
+      if(isset($result->errors->message) && $result->errors->message == 'token is invalid') {
+        $this->lastError = 'AUTHY_SERVER_BAD_OTP';
+      } elseif(isset($result->errors->api_key)) {
         $this->lastError = 'AUTHY_SERVER_INVALID_API_KEY';
       } else {
-    		$this->lastError = 'AUTHY_SERVER_INVALID_DATA';
-    	}
-    	return false;
+        $this->lastError = 'AUTHY_SERVER_INVALID_DATA';
+      }
+      return false;
     }
 
     if(isset($result->token) && $result->token == 'is valid') {
-    	return true;
+      return true;
     }
 
     return false;
+  }
+
+  /**
+   * Request SMS token.
+   *
+   * @param int $authyId
+   *   Authy ID to request SMS token for.
+   *
+   * @param bool $force
+   *   Force sending of SMS even for users with App.
+   *
+   * @return boolean
+   *   Returns true if SMS request was OK. false if not.
+   */
+  public function requestSms($authyId, $force = false) {
+    $data = array(
+      'authy_id' => $authyId,
+      'force'    => $force,
+    );
+
+    $result = $this->apiCall('sms', $data);
+
+    if ($result === false) {
+      $this->lastError = 'AUTHY_SERVER_ERROR';
+      return false;
+    }
+
+    if (isset($result->errors)) {
+      $this->lastError = 'AUTHY_SERVER_INVALID_DATA';
+      return false;
+    }
+
+    return true;
   }
 
   /**
@@ -173,14 +219,14 @@ class Authy {
   private function apiCall($action, $data) {
     switch($this->_sandbox) {
       case true:
-     	  $url = $this->_servers['sandbox'];
-     	  break;
-     	default:
-     	  $url = $this->_servers['production'];
+          $url = $this->_servers['sandbox'];
+          break;
+        default:
+          $url = $this->_servers['production'];
     }
 
     switch($action) {
-    	case 'new':
+      case 'new':
         $url = $url.'/protected/json/users/new?api_key='.$this->_apiKey;
         $postData = http_build_query($data);
         $opts = array(
@@ -194,9 +240,10 @@ class Authy {
           'ignore_errors' => true,
         ));
 
-    	  break;
-    	case 'verify':
-        $url = $url.'/protected/json/verify/'.$data['token'].'/'.$data['authy_id'].'?api_key='.$this->_apiKey;
+      break;
+
+      case 'verify':
+        $url = $url.'/protected/json/verify/'.$data['token'].'/'.$data['authy_id'].'?api_key='.$this->_apiKey.'&force=true';
 
         $opts = array(
           'http' => array(
@@ -206,21 +253,38 @@ class Authy {
           'ignore_errors' => true,
         ));
 
-    	  break;
-    }
+      break;
 
+      case 'sms':
+        $url = $url.'/protected/json/sms/'.$data['authy_id'].'?api_key='.$this->_apiKey;
+
+        if($data['force'] === true) {
+          $url = $url.'&force=true';
+        }
+
+        $opts = array(
+          'http' => array(
+          'method'  => 'GET',
+          'timeout' => $this->_serverTimeout,
+          'header'  => "User-Agent: phpSec (http://phpseclib.com)",
+          'ignore_errors' => true,
+        ));
+
+      break;
+
+    }
 
     $context = stream_context_create($opts);
     $result  = @file_get_contents($url, false, $context);
 
     if($result === false) {
-    	return false;
+      return false;
     }
 
     return json_decode($result);
-  }
+   }
 
-  /**
+   /**
    * Loads an authy entry from the database
    *
    * @param string $uid
