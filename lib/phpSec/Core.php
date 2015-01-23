@@ -48,6 +48,12 @@ class Core extends \Pimple {
     $this['auth/authy'] = function($psl) {
       return new Auth\Authy($psl);
     };
+    
+    $this['auth/u2f'] = function($psl) {
+      $scheme = isset($_SERVER['HTTPS']) ? "https://" : "http://";
+      $appId = $scheme . $_SERVER['HTTP_HOST'];
+      return new Auth\U2F($psl, $appId);
+    };
 
     $this['auth/mnemonic'] = function($psl) {
       return new Auth\Mnemonic($psl);
